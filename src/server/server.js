@@ -2,6 +2,7 @@ const express = require("express");
 const dotenv = require("dotenv");
 const webpack = require("webpack");
 import React from "react";
+import helmet from "helmet";
 import { renderToString } from "react-dom/server";
 import { Provider } from "react-redux";
 import { createStore } from "redux";
@@ -27,6 +28,12 @@ if (ENV === "development") {
 
   app.use(webpackDevMiddleware(compiler, serverConfig));
   app.use(webpackHotMiddleware(compiler));
+} else {
+  app.use(express.static(`${__dirname}/public`));
+  app.use(helmet());
+  app.use(helmet.permittedCrossDomainPolicies());
+
+  app.disable("x-powered-by");
 }
 
 const setResponse = (html) => {
@@ -51,6 +58,10 @@ const renderApp = (req, res) => {
         {renderRoutes(serverRoutes)}
       </StaticRouter>
     </Provider>
+  );
+  res.set(
+    "Content-Security-Policy",
+    "default-src *; style-src 'self' http://* 'unsafe-inline'; script-src 'self' http://* 'unsafe-inline' 'unsafe-eval'"
   );
   res.send(setResponse(html));
 };
