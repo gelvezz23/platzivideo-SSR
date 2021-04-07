@@ -10,6 +10,7 @@ import { renderRoutes } from "react-router-config";
 import serverRoutes from "./../frontend/routes/serverRoutes";
 import { StaticRouter } from "react-router-dom";
 import reducer from "./../frontend/reducers";
+import getManifest from "./getManifest";
 import initialState from "./../frontend/initialState";
 
 const app = express();
@@ -29,6 +30,10 @@ if (ENV === "development") {
   app.use(webpackDevMiddleware(compiler, serverConfig));
   app.use(webpackHotMiddleware(compiler));
 } else {
+  app.use((req, res, next) => {
+    if (!req.hashManifest) req.hashManifest = getManifest();
+    next();
+  });
   app.use(express.static(`${__dirname}/public`));
   app.use(helmet());
   app.use(helmet.permittedCrossDomainPolicies());
@@ -36,22 +41,32 @@ if (ENV === "development") {
   app.disable("x-powered-by");
 }
 
-const setResponse = (html) => {
+const setResponse = (html, preload, manifest) => {
+  const vendorStyles = manifest ? manifest["vendors.css"] : "assets/vendor.css";
+
+  const mainBuild = manifest ? manifest["main.js"] : "assets/app.js";
+  const vendorBuild = manifest ? manifest["vendors.js"] : "assets/vendor.js";
+
   return `
     <!DOCTYPE html>
       <head>
-        <link href="assets/app.css" rel="stylesheet" type="text/css"/>
+       
+        <link href=${vendorStyles} rel="stylesheet" type="text/css"/>
+
         <title>Platzi video</title>
       </head>
       <body>
         <div id='app'>${html}</div>  
-        <script src="assets/app.js" type="text/javascript"></script>
+        <script src=${mainBuild} type="text/javascript"></script>
+        <script src=${vendorBuild} type="text/javascript"></script>
+
       </body>
     </html>`;
 };
 
 const renderApp = (req, res) => {
   const store = createStore(reducer, initialState);
+  const preloadState = store.getState();
   const html = renderToString(
     <Provider store={store}>
       <StaticRouter location={req.url} context={{}}>
@@ -63,7 +78,7 @@ const renderApp = (req, res) => {
     "Content-Security-Policy",
     "default-src *; style-src 'self' http://* 'unsafe-inline'; script-src 'self' http://* 'unsafe-inline' 'unsafe-eval'"
   );
-  res.send(setResponse(html));
+  res.send(setResponse(html, preloadState, req.hashManifest));
 };
 
 app.get("*", renderApp);
